@@ -79,7 +79,41 @@ int object_exists(const ObjectID *id) {
 //   7. rename() the temp file to the final path (atomic on POSIX)
 //   8. Open and fsync() the shard directory to persist the rename
 //   9. Store the computed hash in *id_out
+char* object_write(const char *data, size_t len) {
+    char header[64];
+    sprintf(header, "blob %ld", len);
 
+    int header_len = strlen(header) + 1;
+    int total_len = header_len + len;
+
+    char *store = malloc(total_len);
+    memcpy(store, header, header_len);
+    memcpy(store + header_len, data, len);
+
+    unsigned char hash[20];
+    SHA1((unsigned char *)store, total_len, hash);
+
+    char *hex = malloc(41);
+    for (int i = 0; i < 20; i++)
+        sprintf(hex + i * 2, "%02x", hash[i]);
+    hex[40] = '\0';
+
+    char dir[50];
+    sprintf(dir, ".pes/objects/%.2s", hex);
+    mkdir(".pes", 0777);
+    mkdir(".pes/objects", 0777);
+    mkdir(dir, 0777);
+
+    char path[100];
+    sprintf(path, "%s/%s", dir, hex + 2);
+
+    FILE *fp = fopen(path, "wb");
+    fwrite(store, 1, total_len, fp);
+    fclose(fp);
+
+    free(store);
+    return hex;
+}
 // HINTS - Useful syscalls and functions for this phase:
 //   - sprintf / snprintf : formatting the header string
 //   - compute_hash       : hashing the combined header + data
@@ -93,10 +127,40 @@ int object_exists(const ObjectID *id) {
 
 //
 // Returns 0 on success, -1 on error.
-int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
-    // TODO: Implement
-    (void)type; (void)data; (void)len; (void)id_out;
-    return -1;
+char* object_write(const char *data, size_t len) {
+    char header[64];
+    sprintf(header, "blob %ld", len);
+
+    int header_len = strlen(header) + 1;
+    int total_len = header_len + len;
+
+    char *store = malloc(total_len);
+    memcpy(store, header, header_len);
+    memcpy(store + header_len, data, len);
+
+    unsigned char hash[20];
+    SHA1((unsigned char *)store, total_len, hash);
+
+    char *hex = malloc(41);
+    for (int i = 0; i < 20; i++)
+        sprintf(hex + i * 2, "%02x", hash[i]);
+    hex[40] = '\0';
+
+    char dir[50];
+    sprintf(dir, ".pes/objects/%.2s", hex);
+    mkdir(".pes", 0777);
+    mkdir(".pes/objects", 0777);
+    mkdir(dir, 0777);
+
+    char path[100];
+    sprintf(path, "%s/%s", dir, hex + 2);
+
+    FILE *fp = fopen(path, "wb");
+    fwrite(store, 1, total_len, fp);
+    fclose(fp);
+
+    free(store);
+    return hex;
 }
 
 // Read an object from the store.
@@ -121,8 +185,27 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 //
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
-int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
-    return -1;
+void* object_read(const char *hash, size_t *len) {
+    char path[100];
+    sprintf(path, ".pes/objects/%.2s/%s", hash, hash + 2);
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return NULL;
+
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    rewind(fp);
+
+    char *buffer = malloc(size);
+    fread(buffer, 1, size, fp);
+    fclose(fp);
+
+    char *content = strchr(buffer, '\0') + 1;
+    *len = size - (content - buffer);
+
+    void *result = malloc(*len);
+    memcpy(result, content, *len);
+
+    free(buffer);
+    return result;
 }
